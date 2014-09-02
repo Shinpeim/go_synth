@@ -67,7 +67,7 @@ func readCommand(scanner *bufio.Scanner) (string, string, error) {
 func playOsc(arg string, chanMap map[string]chan interface{}) error {
 	args := strings.Split(arg, ":")
 
-	if len(args) != 2 {
+	if len(args) != 3 {
 		return errors.New("invalid argument in play")
 	}
 
@@ -78,13 +78,18 @@ func playOsc(arg string, chanMap map[string]chan interface{}) error {
 		return errors.New(fmt.Sprintf("key: %s is already played", key))
 	}
 
-	freq, err := strconv.ParseFloat(args[1], 64)
+	oscType := args[1]
+
+	freq, err := strconv.ParseFloat(args[2], 64)
 	if err != nil {
-		fmt.Println("usage > play key:freq")
+		return errors.New("usage > play key:freq")
+	}
+
+	osc, err := NewOsc(oscType, freq, sampleRate)
+	if err != nil {
 		return err
 	}
 
-	osc := NewSquareOsc(freq, sampleRate)
 	c := make(chan interface{})
 	go play(osc, c)
 
@@ -97,6 +102,7 @@ func stopOsc(arg string, chanMap map[string]chan interface{}) error {
 	c, present := chanMap[arg]
 	if present {
 		c <- nil
+		delete(chanMap, arg)
 		return nil
 	} else {
 		return errors.New("no such key")
