@@ -1,16 +1,11 @@
-package osc
-
-type Osc interface {
-	powerInNthSample(n int) float32
-	Process(out [][]float32)
-}
+package main
 
 type squareOsc struct {
 	freq       float64
 	sampleRate float64
 }
 
-func NewSquareOsc(freq float64, sampleRate float64) Osc {
+func NewSquareOsc(freq float64, sampleRate float64) playable {
 	return &squareOsc{freq, sampleRate}
 }
 

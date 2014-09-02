@@ -1,7 +1,6 @@
 package main
 
 import (
-	"./osc"
 	"bufio"
 	"code.google.com/p/portaudio-go/portaudio"
 	"errors"
@@ -9,7 +8,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"time"
 )
 
 const sampleRate = 44100
@@ -20,53 +18,89 @@ func main() {
 
 	scanner := bufio.NewScanner(os.Stdin)
 
+	chanMap := map[string]chan interface{}{}
+
 	for true {
-		fmt.Print("freq sec: ")
-		freq, sec, err := readFreqAndSecFromScanner(scanner)
+		fmt.Print("command?: ")
+		command, arg, err := readCommand(scanner)
 
 		if err != nil {
 			fmt.Println("invalid format")
 			continue
 		}
 
-		osc := osc.NewSquareOsc(freq, sampleRate)
-		go play(osc, sec)
+		switch command {
+		case "play":
+			err := playOsc(arg, chanMap)
+			if err != nil {
+				fmt.Println(err)
+				continue
+			}
+		case "stop":
+			err := stopOsc(arg, chanMap)
+			if err != nil {
+				fmt.Println(err)
+				continue
+			}
+		}
 	}
 }
 
-func readFreqAndSecFromScanner(scanner *bufio.Scanner) (freq float64, sec time.Duration, err error) {
-	if scanner.Scan() {
-		input := scanner.Text()
-		words := strings.Split(input, " ")
+func readCommand(scanner *bufio.Scanner) (string, string, error) {
+	if !scanner.Scan() {
+		return "", "", scanner.Err()
+	}
 
-		if len(words) < 2 {
-			return 0, 0, errors.New("invalid size")
-		}
+	input := scanner.Text()
+	words := strings.Split(input, " ")
 
-		freq, freqErr := strconv.Atoi(words[0])
-		if freqErr != nil {
-			return 0, 0, freqErr
-		}
+	if len(words) < 2 {
+		return "", "", errors.New("invalid size")
+	}
 
-		sec, secErr := strconv.Atoi(words[1])
-		if secErr != nil {
-			return 0, 0, secErr
-		}
+	command := words[0]
+	arg := words[1]
 
-		return float64(freq), time.Duration(sec), nil
+	return command, arg, nil
+}
+
+func playOsc(arg string, chanMap map[string]chan interface{}) error {
+	args := strings.Split(arg, ":")
+
+	if len(args) != 2 {
+		return errors.New("invalid argument in play")
+	}
+
+	key := args[0]
+
+	_, present := chanMap[key]
+	if present {
+		return errors.New(fmt.Sprintf("key: %s is already played", key))
+	}
+
+	freq, err := strconv.ParseFloat(args[1], 64)
+	if err != nil {
+		fmt.Println("usage > play key:freq")
+		return err
+	}
+
+	osc := NewSquareOsc(freq, sampleRate)
+	c := make(chan interface{})
+	go play(osc, c)
+
+	chanMap[key] = c
+
+	return nil
+}
+
+func stopOsc(arg string, chanMap map[string]chan interface{}) error {
+	c, present := chanMap[arg]
+	if present {
+		c <- nil
+		return nil
 	} else {
-		return 0, 0, scanner.Err()
+		return errors.New("no such key")
 	}
-}
-
-func play(osc osc.Osc, sec time.Duration) {
-	stream, err := portaudio.OpenDefaultStream(0, 1, sampleRate, 0, osc.Process)
-	panicIfError(err)
-	defer stream.Close()
-
-	panicIfError(stream.Start())
-	time.Sleep(sec * time.Second)
-	panicIfError(stream.Stop())
 }
 
 func panicIfError(err error) {
